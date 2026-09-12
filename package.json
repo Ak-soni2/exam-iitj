@@ -1,0 +1,15 @@
+{
+  "name": "exam-iitj",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Exam schedule lookup by roll number — IIT Jodhpur",
+  "scripts": {
+    "start": "python -m http.server 8000",
+    "test": "node tools/test-lookup.js && node tools/test-render.js",
+    "deploy": "vercel --prod"
+  },
+  "devDependencies": {
+    "jsdom": "^27.0.0",
+    "vercel": "^59.0.0"
+  }
+}

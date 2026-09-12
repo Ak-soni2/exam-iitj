@@ -1,0 +1,8 @@
+node_modules/
+package-lock.json
+# The examination cell's source workbooks stay out of the repo.
+*.xlsx
+*.csv
+__pycache__/
+
+.vercel

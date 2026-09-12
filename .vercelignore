@@ -1,0 +1,5 @@
+# The examination cell's source workbooks must never be deployed.
+*.xlsx
+*.csv
+node_modules/
+tools/

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Exam schedule — IIT Jodhpur</title>
+<meta name="description" content="Look up your examination dates, slots and venues by roll number.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='14'>&#128197;</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<main class="page">
+
+  <div class="masthead">
+    <p class="masthead__inst">Indian Institute of Technology Jodhpur</p>
+    <p class="masthead__term" id="term">Examination schedule</p>
+  </div>
+
+  <form class="lookup" id="lookup" autocomplete="off">
+    <label class="lookup__label" for="roll">Your roll number</label>
+    <input class="lookup__input" id="roll" name="roll" type="text"
+           placeholder="B23ME1004" spellcheck="false" autocapitalize="characters">
+    <button class="lookup__go" type="submit">Show schedule</button>
+  </form>
+
+  <p class="warn" id="mock-warning" hidden>
+    Showing sample data. The real datesheet has not been loaded yet.
+  </p>
+
+  <section id="results" aria-live="polite"></section>
+
+  <footer class="foot">
+    <p>Compiled from the examination cell datesheet and seating plan. If something
+       here disagrees with the official notice, the official notice is correct.</p>
+  </footer>
+
+</main>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
