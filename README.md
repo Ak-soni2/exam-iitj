@@ -4,8 +4,9 @@ A student types a roll number and gets their papers in date order, with
 timings and room allocation. Static site: no backend, no build step, no
 framework.
 
-Loaded with the **Minor Examinations, Semester I 2026-27** datesheet
-(15–20 September 2026): 4,156 students, 443 exam sittings.
+Loaded with the **Major Examinations, Semester I 2026-27** datesheet
+(19–26 November 2026, no papers on 24 November): 4,125 students, 442 exam
+sittings (mapping and venue workbooks as revised on 16 November 2026). The Minor datesheet it replaced is in git history.
 
 ## Running locally
 
@@ -23,8 +24,8 @@ Both source workbooks live in this directory (they are gitignored — the
 `.xlsx` files are the examination cell's, not ours to publish):
 
     python tools/convert.py \
-      "Student Mapping for Minor Examinations ....xlsx" \
-      "5. Exam Venue (Minor, SI, 26-27).xlsx"
+      "Student Mapping for Major Examination ....xlsx" \
+      "6. Exam Venue (Major, SI, 26-27).xlsx"
 
 This rewrites `data.js`. The venue workbook is optional; without it every
 offline paper shows "To be announced". Read the script's output before
@@ -42,7 +43,19 @@ rather than trusting them:
   before its start is corrected and counted in the run summary.
 * **A course can sit twice** on different days for different groups, so an
   exam is keyed by course *and* sitting, never by course code alone.
+* **The major venue sheet stacks three sessions per day** (morning,
+  afternoon, evening), each under its own banner and header, and one banner
+  reads `06:00 AM to 09:00 PM` for an evening session. Rooms are therefore
+  keyed by (date, session start, course), and a start before 07:00 is read
+  as PM.
 * **Blank rows appear mid-sheet**, so reading cannot stop at the first one.
+* **The 16 November revision splits the online sheet.** "New Online Exams
+  16.11.2026" holds the papers still sat online; "Offline Exams" holds 141
+  executive papers moved offline, with Date and Time left blank; "Not Exam"
+  lists registrations with no major exam and is skipped. The superseded
+  "Old-Online and Executive Students" sheet is not read as papers — it only
+  fills the blank date and time on "Offline Exams" rows, and any of its rows
+  that no current sheet covers are reported.
 * **The venue sheet has no roll numbers.** It maps (date, course) to rooms,
   and the building is a merged cell that applies to the rows beneath it. A
   blank room means "same room as the row above", and the header repeats
@@ -50,14 +63,18 @@ rather than trusting them:
 
 ### Rooms are per course, not per student
 
-This is the one real limitation, and the page says so. 353 of 424 course-days
-use a single room, which is an exact answer. The rest are split across rooms
+This is the one real limitation, and the page says so. 370 of 430 course
+sittings use a single room, which is an exact answer. The rest are split across rooms
 by student count with no indication of who sits where, so the page lists every
 candidate room and tells the student to check the seating list at the venue.
 Fixing this properly needs a seating plan with roll numbers in it.
 
-Online and executive papers have no room at all. They are marked "Online
-exam", and the meeting link is deliberately **not** published — see below.
+Papers on a sheet whose name contains "online", or with a meeting link, are
+marked "Online exam" and never given a room (an online student shares a
+sitting with the offline students of the same course, not their room). The
+link itself is deliberately **not** published — see below. That is 1,218
+papers; another 71 offline papers whose course has no row in the venue sheet
+at that sitting show "To be announced".
 
 ## Tests
 
@@ -65,12 +82,20 @@ exam", and the meeting link is deliberately **not** published — see below.
     node tools/test-render.js    # 20 tests: DOM output, failure states (npm i jsdom)
 
 `test-lookup.js` validates the generated dataset itself, so run it after every
-conversion. It walks all 4,156 students and fails if any references a missing
+conversion. It walks all 4,125 students and fails if any references a missing
 course, has an implausible exam hour, or has an unflagged same-slot collision.
 
-It reports that **67 students have two papers in the same sitting**. That is
+It reports that **2 students have two papers in the same sitting**. That is
 in the source datesheet, not a bug here; the page flags those rows in red and
 tells the student to contact the examination cell.
+
+## Deploying to Vercel
+
+    npx vercel --prod
+
+The project is `files` under the `ak-soni2` account (`vercel link` writes
+`.vercel/`, which is gitignored). After a deploy, look up a student you know
+and compare their papers with the datesheet.
 
 ## Deploying to GitHub Pages
 
@@ -99,7 +124,7 @@ Vercel deploy (`.vercelignore`), since they contain all of the above.
 
 ## Still public, and worth a decision
 
-Names, roll numbers, programmes and rooms for all 4,156 students remain in
+Names, roll numbers, programmes and rooms for all 4,125 students remain in
 `data.js`, because the site cannot answer its one question without them.
 Anyone with the URL can read every row, not just their own.
 

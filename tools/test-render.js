@@ -48,7 +48,7 @@ function type(w, value) {
 console.log("\nPage boot");
 const w = boot();
 test("term line is filled from the dataset", () =>
-  assert.ok(w.document.getElementById("term").textContent.includes("Minor Examinations")));
+  assert.ok(w.document.getElementById("term").textContent.includes("Major Examinations")));
 test("a notice explains how rooms are allocated", () => {
   const banner = w.document.getElementById("mock-warning");
   assert.strictEqual(banner.hidden, false);
@@ -95,8 +95,15 @@ test("deep link hash is set", () =>
 
 console.log("\nOnline exams");
 test("an online paper says so and points at the emailed link", () => {
-  assert.ok(onlineRoll, "dataset has no online paper");
-  const out = type(w, onlineRoll);
+  // The major workbooks carry no meeting-link column, so the dataset may have
+  // no online paper; flag one in the live page's data so the path is exercised.
+  const entry = w.EXAM_DATA.students[busiest].exams[0];
+  const saved = { venue: entry.venue, online: entry.online };
+  const roll = onlineRoll || busiest;
+  if (!onlineRoll) { entry.venue = []; entry.online = true; }
+  const out = type(w, roll);
+  entry.venue = saved.venue;
+  if (saved.online === undefined) delete entry.online; else entry.online = saved.online;
   assert.ok(/Online exam/.test(out.textContent));
   assert.ok(/emails your meeting link/i.test(out.textContent));
 });

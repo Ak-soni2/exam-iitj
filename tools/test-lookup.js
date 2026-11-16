@@ -109,8 +109,16 @@ test("papers come back in chronological order", () => {
 });
 
 test("an online paper is marked as online", () => {
-  assert.ok(onlineRoll, "dataset has no online paper to test");
-  const e = lookup(data, onlineRoll).exams.find(x => x.isOnline);
+  // The major workbooks carry no meeting-link column, so the dataset may have
+  // no online paper; flag one in a copy so the path is still exercised.
+  let source = data, roll = onlineRoll;
+  if (!roll) {
+    source = JSON.parse(JSON.stringify(data));
+    roll = busiest;
+    source.students[roll].exams[0].venue = [];
+    source.students[roll].exams[0].online = true;
+  }
+  const e = lookup(source, roll).exams.find(x => x.isOnline);
   assert.ok(e, "expected an online paper");
   assert.strictEqual(e.venue, "Online exam");
 });

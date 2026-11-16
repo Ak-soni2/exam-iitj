@@ -10,7 +10,7 @@ The mapping workbook has one row per student-paper, on one or more sheets:
     Course Type | Slot | Instructor 1 | ... | Department | Program | ...
 
 It carries no room column, so rooms come from the venue workbook (see
-tools/venues.py), which maps each (date, course) to the rooms it uses. Online
+tools/venues.py), which maps each (date, session, course) to the rooms it uses. Online
 and executive sheets instead supply a Google Meet Link, used as the venue for
 those papers. Papers with neither show "To be announced".
 """
@@ -25,7 +25,7 @@ import openpyxl
 
 import venues as venue_sheet
 
-TERM = "Minor Examinations, Semester I, 2026-27"
+TERM = "Major Examinations, Semester I, 2026-27"
 
 TIME_RE = re.compile(
     r"^(\d{1,2}):(\d{2})\s*(AM|PM)\s*TO\s*(\d{1,2}):(\d{2})\s*(AM|PM)$")
@@ -111,6 +111,47 @@ def tidy_programme(programme, department):
     return text or clean(department)
 
 
+def is_superseded(title):
+    return title.strip().lower().startswith("old")
+
+
+def is_not_exam(title):
+    return re.sub(r"\s+", " ", title.strip().lower()) == "not exam"
+
+
+def sheet_rows(ws, problems):
+    """Yield (row, cell, line) for each non-blank data row of a sheet."""
+    rows = list(ws.iter_rows(values_only=True))
+    # Sheets carry a title banner above the header; find the real header.
+    header_at = None
+    for i, row in enumerate(rows[:10]):
+        cells = [clean(c).lower() for c in row]
+        if "roll no" in cells and "course code" in cells:
+            header_at = i
+            break
+    if header_at is None:
+        problems.append("sheet %r: no header row found; skipped" % ws.title)
+        return
+
+    header = [clean(c) for c in rows[header_at]]
+    idx = {h: i for i, h in enumerate(header) if h}
+    missing = [c for c in ("Date", "Time", "Roll No", "Course Code")
+               if c not in idx]
+    if missing:
+        problems.append("sheet %r: missing columns %s; skipped"
+                        % (ws.title, ", ".join(missing)))
+        return
+
+    def cell(row, name):
+        i = idx.get(name)
+        return row[i] if i is not None and i < len(row) else None
+
+    for line, row in enumerate(rows[header_at + 1:], header_at + 2):
+        # Blank rows appear in the middle of the data, not just at the end.
+        if any(c is not None and str(c).strip() for c in row):
+            yield row, cell, line
+
+
 def main():
     if len(sys.argv) not in (2, 3):
         sys.exit(__doc__)
@@ -135,36 +176,32 @@ def main():
     seen = set()       # (roll, exam key) to drop duplicate registrations
     rows_read = 0
 
+    # The workbook revised on 16 Nov 2026 splits the old online/executive sheet
+    # into "New Online Exams ..." (still online) and "Offline Exams" (moved to
+    # an offline paper, with Date and Time left blank), and adds "Not Exam"
+    # (registrations with no major exam). The superseded "Old-..." sheet is
+    # not read as papers; it only supplies the date and time that the
+    # "Offline Exams" rows leave blank.
+    superseded = [ws for ws in wb.worksheets if is_superseded(ws.title)]
+    current = [ws for ws in wb.worksheets
+               if not is_superseded(ws.title) and not is_not_exam(ws.title)]
     for ws in wb.worksheets:
-        rows = list(ws.iter_rows(values_only=True))
-        # Sheets carry a title banner above the header; find the real header.
-        header_at = None
-        for i, row in enumerate(rows[:10]):
-            cells = [clean(c).lower() for c in row]
-            if "roll no" in cells and "course code" in cells:
-                header_at = i
-                break
-        if header_at is None:
-            problems.append("sheet %r: no header row found; skipped" % ws.title)
-            continue
+        if is_not_exam(ws.title):
+            print("Sheet %r skipped: courses with no major exam." % ws.title)
 
-        header = [clean(c) for c in rows[header_at]]
-        idx = {h: i for i, h in enumerate(header) if h}
-        missing = [c for c in ("Date", "Time", "Roll No", "Course Code")
-                   if c not in idx]
-        if missing:
-            problems.append("sheet %r: missing columns %s; skipped"
-                            % (ws.title, ", ".join(missing)))
-            continue
+    fallback = {}      # (roll, code) -> (date, time) from superseded sheets
+    for ws in superseded:
+        for row, cell, line in sheet_rows(ws, problems):
+            roll = norm_roll(cell(row, "Roll No"))
+            code = clean(cell(row, "Course Code")).upper()
+            if roll and code and parse_date(cell(row, "Date")):
+                fallback[(roll, code)] = (cell(row, "Date"), cell(row, "Time"))
+    covered = set()    # (roll, code) seen in a current sheet
+    filled = 0
 
-        def cell(row, name, idx=idx):
-            i = idx.get(name)
-            return row[i] if i is not None and i < len(row) else None
-
-        for line, row in enumerate(rows[header_at + 1:], header_at + 2):
-            # Blank rows appear in the middle of the data, not just at the end.
-            if not any(c is not None and str(c).strip() for c in row):
-                continue
+    for ws in current:
+        online_sheet = "online" in ws.title.lower()
+        for row, cell, line in sheet_rows(ws, problems):
             rows_read += 1
 
             roll = norm_roll(cell(row, "Roll No"))
@@ -173,14 +210,20 @@ def main():
                 problems.append("%s row %d: missing roll number or course code"
                                 % (ws.title, line))
                 continue
+            covered.add((roll, code))
 
-            iso = parse_date(cell(row, "Date"))
+            date_value, time_value = cell(row, "Date"), cell(row, "Time")
+            if not clean(date_value) and not clean(time_value)                     and (roll, code) in fallback:
+                date_value, time_value = fallback[(roll, code)]
+                filled += 1
+
+            iso = parse_date(date_value)
             if not iso:
                 problems.append("%s row %d: unreadable date %r"
-                                % (ws.title, line, cell(row, "Date")))
+                                % (ws.title, line, date_value))
                 continue
 
-            start, end, fixes = parse_time_range(cell(row, "Time"))
+            start, end, fixes = parse_time_range(time_value)
             if start is None:
                 problems.append("%s row %d: %s" % (ws.title, line, fixes))
                 continue
@@ -209,23 +252,35 @@ def main():
                 "exams": [],
             })
 
-            # The venue sheet lists rooms per course, not per student, so a
-            # course split over several rooms yields every candidate room.
-            where = list(rooms.get((iso, code), []))
+            # Online papers carry a Google Meet link, or sit on an online
+            # sheet. The link is deliberately NOT published: the whole dataset
+            # ships to every visitor, and a public meeting link is a joinable
+            # exam room. Students get the link by email from the examination
+            # cell instead.
+            online = online_sheet or bool(clean(cell(row, "Google Meet Link")))
 
-            # Online papers carry a Google Meet link. It is deliberately NOT
-            # published: the whole dataset ships to every visitor, and a public
-            # meeting link is a joinable exam room. Students get the link by
-            # email from the examination cell instead.
-            online = bool(clean(cell(row, "Google Meet Link")))
+            # The venue sheet lists rooms per course, not per student, so a
+            # course split over several rooms yields every candidate room. An
+            # online student shares the sitting with offline students of the
+            # same course, but not their room.
+            where = [] if online else list(
+                rooms.get((iso, start, code)) or rooms.get((iso, "", code), []))
 
             entry = {"course": key, "venue": where}
             if online:
                 entry["online"] = True
             record["exams"].append(entry)
 
+    orphans = sorted(k for k in fallback if k not in covered)
+    for roll, code in orphans:
+        problems.append("superseded sheet: %s %s is on no current sheet; "
+                        "dropped" % (roll, code))
+
+    online_papers = sum(1 for s in students.values()
+                        for e in s["exams"] if e.get("online"))
     missing_venue = sum(1 for s in students.values()
-                        for e in s["exams"] if not e["venue"])
+                        for e in s["exams"]
+                        if not e["venue"] and not e.get("online"))
     split_venue = sum(1 for s in students.values()
                       for e in s["exams"] if len(e["venue"]) > 1)
 
@@ -251,10 +306,16 @@ def main():
 
     print("\nRead %d rows. Wrote data.js: %d students, %d exam sittings."
           % (rows_read, len(students), len(courses)))
+    if filled:
+        print("Filled blank date and time for %d rows from the superseded "
+              "sheet." % filled)
     if time_fixes:
         print("Corrected AM/PM typos in the sheet:")
         for fix, n in sorted(time_fixes.items()):
             print("  %s  (%d rows)" % (fix, n))
+    if online_papers:
+        print("%d student-papers are online; they show 'Online exam'."
+              % online_papers)
     if missing_venue:
         print("%d student-papers have no venue; they show 'To be announced'."
               % missing_venue)
